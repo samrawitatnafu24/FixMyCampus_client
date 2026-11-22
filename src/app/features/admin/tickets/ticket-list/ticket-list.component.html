@@ -1,0 +1,276 @@
+<div class="space-y-4">
+  <!-- Top Bar: Title & Action -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div>
+      <h2 class="text-xl lg:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+        <span>Work Order Management</span>
+        <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-700">
+          {{ filteredTickets().length }} Total
+        </span>
+      </h2>
+      <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
+        Review, filter, dispatch technicians, and monitor campus maintenance tickets.
+      </p>
+    </div>
+
+    <!-- Dispatch Action Button -->
+    <button
+      type="button"
+      (click)="showCreateModal = true"
+      class="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-blue-900 text-white text-xs font-semibold rounded-lg shadow-sm focus:outline-hidden focus:ring-2 focus:ring-primary/40 transition-colors"
+    >
+      <span class="material-symbols-outlined text-base">add_circle</span>
+      Create Work Order
+    </button>
+  </div>
+
+  <!-- Reusable Filter Bar -->
+  <app-filter-bar
+    [buildings]="buildingStore.buildings()"
+    (filterChange)="onFilterChange($event)"
+  ></app-filter-bar>
+
+  <!-- Bulk Actions Bar (if items selected) -->
+  @if (selectedTicketIds().size > 0) {
+    <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between gap-3 text-xs font-semibold text-blue-950 animate-fade-in">
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined text-base text-primary">check_box</span>
+        <span>{{ selectedTicketIds().size }} ticket(s) selected</span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          (click)="openBulkStatusModal()"
+          class="px-3 py-1.5 bg-primary text-white rounded font-medium hover:bg-blue-900 transition-colors"
+        >
+          Change Status
+        </button>
+        <button
+          type="button"
+          (click)="clearSelection()"
+          class="px-2.5 py-1.5 text-slate-600 hover:text-slate-800 hover:bg-blue-100/50 rounded transition-colors"
+        >
+          Deselect All
+        </button>
+      </div>
+    </div>
+  }
+
+  
+  <!-- Main High-Density Tickets Table -->
+  <div class="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+    <div class="overflow-x-auto">
+      <table mat-table [dataSource]="dataSource" class="w-full text-left border-collapse min-w-[1000px]">
+        
+        <!-- Select Column -->
+        <ng-container matColumnDef="select">
+          <th mat-header-cell *matHeaderCellDef class="py-3 px-3 w-8 border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            <mat-checkbox
+              (change)="$event ? toggleSelectAll($event) : null"
+              [checked]="dataSource.data.length > 0 && areAllSelected()"
+              [indeterminate]="selectedTicketIds().size > 0 && !areAllSelected()"
+              color="primary">
+            </mat-checkbox>
+          </th>
+          <td mat-cell *matCellDef="let ticket" class="py-3 px-3" (click)="$event.stopPropagation()">
+            <mat-checkbox
+              (click)="$event.stopPropagation()"
+              (change)="$event ? toggleSelect(ticket.id) : null"
+              [checked]="isTicketSelected(ticket.id)"
+              color="primary">
+            </mat-checkbox>
+          </td>
+        </ng-container>
+
+        <!-- Priority Indicator Strip -->
+        <ng-container matColumnDef="priorityStrip">
+          <th mat-header-cell *matHeaderCellDef class="py-3 px-0 w-2 border-b border-slate-200 bg-slate-50/80"></th>
+          <td mat-cell *matCellDef="let ticket" class="py-3 px-0 w-1">
+            <div
+              class="w-1.5 h-10 rounded-full"
+              [ngClass]="{
+                'bg-red-500': ticket.priority === 'CRITICAL',
+                'bg-amber-500': ticket.priority === 'HIGH',
+                'bg-blue-500': ticket.priority === 'MEDIUM',
+                'bg-slate-300': ticket.priority === 'LOW'
+              }"
+              [title]="'Priority: ' + ticket.priority"
+            ></div>
+          </td>
+        </ng-container>
+
+        <!-- Ticket ID Column -->
+        <ng-container matColumnDef="ticketNumber">
+          <th mat-header-cell *matHeaderCellDef class="py-3 px-4 border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Ticket ID</th>
+          <td mat-cell *matCellDef="let ticket" class="py-3 px-4 max-w-[100px]">
+            <span class="font-mono text-primary font-bold text-xs block truncate" [title]="ticket.ticketNumber">{{ ticket.ticketNumber }}</span>
+          </td>
+        </ng-container>
+
+        <!-- Title Column -->
+        <ng-container matColumnDef="title">
+          <th mat-header-cell *matHeaderCellDef class="py-3 px-4 border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Title</th>
+          <td mat-cell *matCellDef="let ticket" class="py-3 px-4 max-w-xs">
+            <div class="flex items-center gap-1.5">
+              <h4 class="font-bold text-slate-900 group-hover:text-primary transition-colors truncate max-w-[220px]" [title]="ticket.title">
+                {{ ticket.title }}
+              </h4>
+              @if ((ticket.attachments?.length || ticket.images?.length)) {
+                <span
+                  (click)="$event.stopPropagation(); openImagePreview((ticket.images && ticket.images[0]) || (ticket.attachments && ticket.attachments[0]))"
+                  class="inline-flex items-center text-slate-400 hover:text-primary cursor-pointer p-0.5 rounded hover:bg-slate-100 transition-colors"
+                  title="Click to view attached photo"
+                >
+                  <span class="material-symbols-outlined text-[15px]">photo_camera</span>
+                </span>
+              }
+            </div>
+            <p class="text-[11px] text-slate-400 truncate max-w-[240px]">
+              {{ ticket.description }}
+            </p>
+          </td>
+        </ng-container>
+
+        <!-- Category Column -->
+        <ng-container matColumnDef="category">
+          <th mat-header-cell *matHeaderCellDef class="py-3 px-4 border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Category</th>
+          <td mat-cell *matCellDef="let ticket" class="py-3 px-4">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700">
+              {{ ticket.category }}
+            </span>
+          </td>
+        </ng-container>
+
+        <!-- Building & Location Column -->
+        <ng-container matColumnDef="location">
+          <th mat-header-cell *matHeaderCellDef class="py-3 px-4 border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Building & Location</th>
+          <td mat-cell *matCellDef="let ticket" class="py-3 px-4">
+            <div class="font-medium text-slate-800 truncate max-w-[150px]" [title]="ticket.building">
+              {{ ticket.building }}
+            </div>
+            <div class="text-[11px] text-slate-400">
+              {{ ticket.floor ? (ticket.floor + (ticket.room ? ' · ' + ticket.room : '')) : (ticket.room || 'General Area') }}
+            </div>
+          </td>
+        </ng-container>
+
+        <!-- Reporter Column -->
+        <ng-container matColumnDef="reporter">
+          <th mat-header-cell *matHeaderCellDef class="py-3 px-4 border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Reporter</th>
+          <td mat-cell *matCellDef="let ticket" class="py-3 px-4">
+            <div class="font-medium text-slate-800 truncate max-w-[130px]">{{ ticket.reporterName }}</div>
+            <div class="text-[11px] text-slate-400 truncate max-w-[130px]">{{ ticket.reporterEmail }}</div>
+          </td>
+        </ng-container>
+
+        <!-- Assigned Technician Column -->
+        <ng-container matColumnDef="technician">
+          <th mat-header-cell *matHeaderCellDef class="py-3 px-4 border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Assigned Technician</th>
+          <td mat-cell *matCellDef="let ticket" class="py-3 px-4">
+            @if (ticket.assignedTechnicianName) {
+              <div class="flex items-center gap-2">
+                <div class="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center border border-slate-200">
+                  <span class="material-symbols-outlined text-[14px]">person</span>
+                </div>
+                <div class="min-w-0">
+                  <span class="font-medium text-slate-800 truncate block max-w-[110px]">{{ ticket.assignedTechnicianName }}</span>
+                  <span class="text-[10px] text-slate-400 truncate block max-w-[110px]">{{ ticket.assignedTechnicianSpecialty }}</span>
+                </div>
+              </div>
+            } @else {
+              <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                Unassigned
+              </span>
+            }
+          </td>
+        </ng-container>
+
+        <!-- Priority Column -->
+        <ng-container matColumnDef="priority">
+          <th mat-header-cell *matHeaderCellDef class="py-3 px-4 border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Priority</th>
+          <td mat-cell *matCellDef="let ticket" class="py-3 px-4">
+            <app-status-badge [priority]="ticket.priority"></app-status-badge>
+          </td>
+        </ng-container>
+
+        <!-- Status Column -->
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef class="py-3 px-4 border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
+          <td mat-cell *matCellDef="let ticket" class="py-3 px-4">
+            <app-status-badge [status]="ticket.status"></app-status-badge>
+          </td>
+        </ng-container>
+
+        <!-- Created / Updated Column -->
+        <ng-container matColumnDef="dates">
+          <th mat-header-cell *matHeaderCellDef class="py-3 px-4 border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Created / Updated</th>
+          <td mat-cell *matCellDef="let ticket" class="py-3 px-4 text-slate-500 whitespace-nowrap">
+            <div class="font-medium text-slate-700">{{ ticket.createdAt | date:'shortDate' }}</div>
+            <div class="text-[10px] text-slate-400">Upd {{ ticket.updatedAt | date:'shortTime' }}</div>
+          </td>
+        </ng-container>
+
+        <!-- Actions Column -->
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef class="py-3 px-4 text-right border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+          <td mat-cell *matCellDef="let ticket" class="py-3 px-4 text-right" (click)="$event.stopPropagation()">
+            <div class="flex items-center justify-end gap-1">
+              <a
+                [routerLink]="['/admin/tickets', ticket.ticketNumber]"
+                class="p-1.5 text-slate-400 hover:text-primary hover:bg-blue-50 rounded transition-colors"
+                title="View Details"
+              >
+                <span class="material-symbols-outlined text-base">visibility</span>
+              </a>
+              <button
+                type="button"
+                (click)="openDeletePrompt(ticket.id, $event)"
+                class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                title="Delete Ticket"
+              >
+                <span class="material-symbols-outlined text-base">delete</span>
+              </button>
+            </div>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;" 
+            class="hover:bg-slate-50/80 transition-colors group cursor-pointer border-b border-slate-100"
+            [ngClass]="{ 'bg-blue-50/40': isTicketSelected(row.id) }"
+            [routerLink]="['/admin/tickets', row.ticketNumber]">
+        </tr>
+        
+        <tr class="mat-row" *matNoDataRow>
+          <td class="mat-cell" colspan="11">
+            <div class="py-16 text-center text-slate-400 space-y-3 border-b border-slate-100">
+              <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                <span class="material-symbols-outlined text-2xl">search_off</span>
+              </div>
+              <div>
+                <h4 class="text-sm font-bold text-slate-700">No Tickets Found</h4>
+                <p class="text-xs text-slate-400 mt-0.5">Try adjusting your filters or search keywords.</p>
+              </div>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Pagination Footer -->
+    <mat-paginator [pageSizeOptions]="[10, 25, 50]"
+                   showFirstLastButtons
+                   aria-label="Select page of tickets"
+                   class="border-t border-slate-200 bg-slate-50/50">
+    </mat-paginator>
+  </div>
+
+  <!-- Create Ticket Modal -->
+  <app-ticket-create-modal
+    [isOpen]="showCreateModal"
+    (closeModal)="showCreateModal = false"
+  ></app-ticket-create-modal>
+
+</div>

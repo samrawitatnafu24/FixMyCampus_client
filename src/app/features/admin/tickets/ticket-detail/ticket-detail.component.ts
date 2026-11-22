@@ -1,0 +1,343 @@
+import { Component, OnInit, signal, inject, Inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { FormsModule } from '@angular/forms';
+import { StatusBadgeComponent } from '../../../../ui/badge/status-badge.component';
+
+import { NotificationStore } from '../../../../store/notification.store';
+import { TechnicianStore } from '../../../../store/technician.store';
+import { TicketStore } from '../../../../store/ticket.store';
+import { TicketService } from '../../../../services/ticket.service';
+import { Technician, Ticket, TicketPriority, TicketStatus, TicketAttachment } from '../../../../models';
+import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { MatButtonModule } from '@angular/material/button';
+import { ImageLightboxDialogComponent } from '../../../../ui/image-lightbox-dialog/image-lightbox-dialog.component';
+
+@Component({
+  selector: 'app-ticket-detail',
+  standalone: true,
+  imports: [CommonModule, RouterModule, FormsModule, StatusBadgeComponent, MatDialogModule, MatButtonModule],
+  templateUrl: './ticket-detail.component.html',
+  styleUrl: './ticket-detail.component.css'
+})
+export class TicketDetailComponent implements OnInit {
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  public ticketStore = inject(TicketStore);
+  public technicianStore = inject(TechnicianStore);
+  private notificationStore = inject(NotificationStore);
+  private dialog = inject(MatDialog);
+  private ticketService = inject(TicketService);
+
+  // We can use the ticketStore.selectedTicket directly in template, or keep local signal
+  // Let's use ticketStore.selectedTicket
+  ticket = this.ticketStore.selectedTicket;
+  isLoading = this.ticketStore.isLoading;
+
+  get reportedImages(): TicketAttachment[] {
+    const t = this.ticket();
+    if (!t?.attachments) return [];
+    return t.attachments.filter(a => a.category !== 'ResolutionEvidence');
+  }
+
+  get resolutionEvidenceImages(): TicketAttachment[] {
+    const t = this.ticket();
+    if (!t?.attachments) return [];
+    return t.attachments.filter(a => a.category === 'ResolutionEvidence');
+  }
+
+  // Note composer
+  newNoteText = '';
+
+  // Modals
+
+
+  // Linear workflow progression steps
+  readonly workflowSteps: TicketStatus[] = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
+
+  ngOnInit(): void {
+    this.route.paramMap.subscribe((params) => {
+      const id = params.get('id');
+      if (id) {
+        this.loadTicket(id);
+      }
+    });
+    this.technicianStore.loadTechnicians();
+  }
+
+  loadTicket(id: string): void {
+    this.ticketStore.loadTicketById(id);
+  }
+
+  isStepActive(step: TicketStatus): boolean {
+    const t = this.ticket();
+    if (!t) return false;
+    return t.status === step;
+  }
+
+  isStepCompleted(step: TicketStatus): boolean {
+    const t = this.ticket();
+    if (!t) return false;
+    const order: Record<TicketStatus, number> = {
+      NEW: 0,
+      ASSIGNED: 1,
+      IN_PROGRESS: 2,
+      RESOLVED: 3,
+      CLOSED: 4
+    };
+    return order[t.status] >= order[step];
+  }
+
+  openAssignModal(): void {
+    const t = this.ticket();
+    if (!t) return;
+    const dialogRef = this.dialog.open(AssignTechnicianDialogComponent, {
+      width: '450px',
+      data: { technicians: this.technicianStore.technicians(), selectedTechId: t.assignedTechnicianId || '' }
+    });
+
+    dialogRef.afterClosed().subscribe((selectedTechId: string) => {
+      if (selectedTechId) {
+        const tech = this.technicianStore.technicians().find((x: Technician) => x.id === selectedTechId);
+        if (tech) {
+          this.ticketStore.assignTechnician({ id: t.id, techId: tech.id, techName: tech.name, techSpecialty: tech.specialty });
+          this.notificationStore.showToast({
+            type: 'success',
+            message: `Work order #${t.ticketNumber} assigned to ${tech.name}.`
+          });
+        }
+      }
+    });
+  }
+
+  openStatusModal(status?: TicketStatus): void {
+    const t = this.ticket();
+    if (!t) return;
+    
+    const dialogRef = this.dialog.open(UpdateStatusDialogComponent, {
+      width: '450px',
+      data: { status: status || t.status || 'IN_PROGRESS', comment: '' }
+    });
+
+    dialogRef.afterClosed().subscribe((result: { status: TicketStatus, comment: string }) => {
+      if (result) {
+        this.ticketStore.updateTicketStatus({ id: t.id, status: result.status, note: result.comment });
+        this.notificationStore.showToast({
+          type: 'success',
+          message: `Ticket transitioned to ${result.status}.`
+        });
+      }
+    });
+  }
+
+  openImagePreview(item: TicketAttachment | string): void {
+    const data = typeof item === 'string'
+      ? { url: item, fileName: 'Attachment', fileSize: '', category: '', uploadedAt: '' }
+      : {
+          url: item.fileUrl,
+          fileName: item.fileName,
+          fileSize: typeof item.fileSize === 'number' ? this.formatFileSize(item.fileSize) : (item.fileSize || ''),
+          category: item.category,
+          uploadedAt: item.uploadedAt,
+          uploaderName: item.uploaderName
+        };
+
+    this.dialog.open(ImageLightboxDialogComponent, {
+      data,
+      width: '750px',
+      maxWidth: '92vw',
+      maxHeight: '92vh'
+    });
+  }
+
+  onPriorityChange(newPriority: TicketPriority): void {
+    const t = this.ticket();
+    if (!t) return;
+    
+    this.ticketStore.updatePriority({ id: t.id, priority: newPriority });
+    
+    this.notificationStore.showToast({
+      type: 'success',
+      message: `Severity set to ${newPriority}.`
+    });
+  }
+
+  addNote(): void {
+    const text = this.newNoteText.trim();
+    const t = this.ticket();
+    if (!text || !t) return;
+
+    this.ticketStore.addComment({ ticketId: t.id, content: text });
+    this.newNoteText = '';
+    this.notificationStore.showToast({
+      type: 'success',
+      message: 'Internal Note Added'
+    });
+  }
+
+  getTargetResolution(): string {
+    const t = this.ticket();
+    if (!t) return 'N/A';
+    switch (t.priority) {
+      case 'CRITICAL': return '< 4 Hours';
+      case 'HIGH': return '< 12 Hours';
+      case 'MEDIUM': return '< 48 Hours';
+      case 'LOW': return 'Routine';
+      default: return 'N/A';
+    }
+  }
+
+  formatFileSize(bytes?: number): string {
+    if (!bytes) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  getSlaStatus(): string {
+    const t = this.ticket();
+    if (!t) return 'Unknown';
+    if (t.status === 'CLOSED' || t.status === 'RESOLVED') return 'Met';
+    return 'Within Threshold';
+  }
+
+  openDeleteModal(): void {
+    const t = this.ticket();
+    if (!t) return;
+
+    const dialogRef = this.dialog.open(DeleteTicketDialogComponent, {
+      width: '400px',
+      data: { ticketNumber: t.ticketNumber }
+    });
+
+    dialogRef.afterClosed().subscribe((confirmed: boolean) => {
+      if (confirmed) {
+        this.ticketService.deleteTicket(t.id).subscribe({
+          next: () => {
+            this.ticketStore.removeTicket(t.id);
+            this.notificationStore.showToast({
+              type: 'success',
+              message: 'Ticket deleted successfully.'
+            });
+            this.router.navigate(['/admin/tickets']);
+          },
+          error: (err) => {
+            this.notificationStore.showToast({
+              type: 'error',
+              message: err?.error?.message || 'Failed to delete ticket.'
+            });
+          }
+        });
+      }
+    });
+  }
+}
+
+@Component({
+  selector: 'app-assign-technician-dialog',
+  standalone: true,
+  imports: [CommonModule, FormsModule, MatDialogModule, MatButtonModule],
+  template: `
+    <div class="flex items-center justify-between m-0 pb-3">
+      <h2 mat-dialog-title class="m-0 text-base font-bold text-slate-900">Assign Maintenance Technician</h2>
+      <button mat-dialog-close class="text-slate-400 hover:text-slate-600 border-0 bg-transparent pr-4 pt-4 pb-0 cursor-pointer">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <mat-dialog-content>
+      <div class="pt-2">
+        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Select Technician</label>
+        <select [(ngModel)]="data.selectedTechId" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded">
+          <option value="" disabled>-- Choose a specialist --</option>
+          @for (tech of data.technicians; track tech.id) {
+            <option [value]="tech.id">{{ tech.name }} ({{ tech.specialty }}) - {{ tech.status }}</option>
+          }
+        </select>
+      </div>
+    </mat-dialog-content>
+    <mat-dialog-actions align="end" class="p-4 pt-0">
+      <button mat-button mat-dialog-close class="text-slate-600">Cancel</button>
+      <button mat-flat-button color="primary" [disabled]="!data.selectedTechId" [mat-dialog-close]="data.selectedTechId">Confirm Assignment</button>
+    </mat-dialog-actions>
+  `
+})
+export class AssignTechnicianDialogComponent {
+  constructor(
+    public dialogRef: MatDialogRef<AssignTechnicianDialogComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: { technicians: Technician[], selectedTechId: string }
+  ) {}
+}
+
+@Component({
+  selector: 'app-update-status-dialog',
+  standalone: true,
+  imports: [CommonModule, FormsModule, MatDialogModule, MatButtonModule],
+  template: `
+    <div class="flex items-center justify-between m-0 pb-3">
+      <h2 mat-dialog-title class="m-0 text-base font-bold text-slate-900">Update Work Order Status</h2>
+      <button mat-dialog-close class="text-slate-400 hover:text-slate-600 border-0 bg-transparent pr-4 pt-4 pb-0 cursor-pointer">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <mat-dialog-content>
+      <div class="pt-2 space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">New Status</label>
+          <select [(ngModel)]="data.status" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded">
+            <option value="NEW">NEW (Unassigned)</option>
+            <option value="ASSIGNED">ASSIGNED</option>
+            <option value="IN_PROGRESS">IN_PROGRESS (Active Repair)</option>
+            <option value="RESOLVED">RESOLVED (Fixed)</option>
+            <option value="CLOSED">CLOSED (Inspected & Archived)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Transition Note / Audit Comment</label>
+          <textarea [(ngModel)]="data.comment" rows="2" placeholder="Add context for this status transition..." class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded"></textarea>
+        </div>
+      </div>
+    </mat-dialog-content>
+    <mat-dialog-actions align="end" class="p-4 pt-0">
+      <button mat-button mat-dialog-close class="text-slate-600">Cancel</button>
+      <button mat-flat-button color="primary" [mat-dialog-close]="data">Save Status</button>
+    </mat-dialog-actions>
+  `
+})
+export class UpdateStatusDialogComponent {
+  constructor(
+    public dialogRef: MatDialogRef<UpdateStatusDialogComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: { status: TicketStatus, comment: string }
+  ) {}
+}
+
+@Component({
+  selector: 'app-delete-ticket-dialog',
+  standalone: true,
+  imports: [CommonModule, MatDialogModule, MatButtonModule],
+  template: `
+    <div class="flex items-center justify-between m-0 pb-3">
+      <h2 mat-dialog-title class="m-0 text-base font-bold text-red-600">Delete Work Order</h2>
+      <button mat-dialog-close class="text-slate-400 hover:text-slate-600 border-0 bg-transparent pr-4 pt-4 pb-0 cursor-pointer">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <mat-dialog-content>
+      <div class="pt-2">
+        <p class="text-sm text-slate-700">
+          Are you sure you want to delete ticket #<strong>{{ data.ticketNumber }}</strong>?
+        </p>
+        <p class="text-xs text-slate-500 mt-2">This ticket will be deleted.</p>
+      </div>
+    </mat-dialog-content>
+    <mat-dialog-actions align="end" class="p-4 pt-0">
+      <button mat-button mat-dialog-close class="text-slate-600">Cancel</button>
+      <button mat-flat-button color="warn" [mat-dialog-close]="true" class="!bg-red-600 hover:!bg-red-700 !text-white font-medium">Delete Ticket</button>
+    </mat-dialog-actions>
+  `
+})
+export class DeleteTicketDialogComponent {
+  constructor(
+    public dialogRef: MatDialogRef<DeleteTicketDialogComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: { ticketNumber: string }
+  ) {}
+}

@@ -1,0 +1,643 @@
+<app-page-container>
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div class="space-y-1">
+      <div class="flex items-center space-x-2 text-xs text-[#64748B]">
+        <a routerLink="/reporter/dashboard" class="hover:text-[#1E3A8A] flex items-center space-x-1">
+          <span class="material-symbols-outlined text-[14px]">home</span>
+          <span>Dashboard</span>
+        </a>
+        <span>/</span>
+        <span class="text-[#0F172A] font-semibold">Report Issue</span>
+      </div>
+      <h1 class="text-2xl font-bold text-[#0F172A] tracking-tight">Report a Campus Issue</h1>
+      <p class="text-sm text-[#444651]">
+        Submit physical plant, classroom technology, plumbing, or facility repair requests.
+      </p>
+    </div>
+
+    <div class="flex items-center space-x-2">
+      <a
+        routerLink="/reporter/my-tickets"
+        class="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded text-xs font-semibold text-[#334155] border border-[#CBD5E1] bg-white hover:bg-[#F8FAFC]"
+      >
+        <span class="material-symbols-outlined text-[16px]">receipt_long</span>
+        <span>My Tickets</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Success Notification Alert -->
+  @if (submitSuccess()) {
+    <div class="p-4 bg-[#ECFDF5] border border-[#A7F3D0] rounded-xl flex items-center space-x-3 text-[#065F46] animate-in fade-in">
+      <span class="material-symbols-outlined text-[24px] text-[#10B981]">check_circle</span>
+      <div class="flex-1 text-sm font-semibold">{{ submitSuccess() }}</div>
+    </div>
+  }
+
+  <!-- Error Alert -->
+  @if (submitError()) {
+    <div class="p-4 bg-[#FEF2F2] border border-[#FECACA] rounded-xl flex items-center space-x-3 text-[#DC2626] animate-in fade-in">
+      <span class="material-symbols-outlined text-[24px]">error</span>
+      <div class="flex-1 text-sm font-semibold">{{ submitError() }}</div>
+      <button type="button" (click)="submitError.set(null)" class="text-[#DC2626] p-1">
+        <span class="material-symbols-outlined text-[18px]">close</span>
+      </button>
+    </div>
+  }
+
+  <!-- Confirmed Duplicate Alert Banner -->
+  @if (confirmedDuplicate(); as dup) {
+    <div class="p-5 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-4 animate-in fade-in shadow-sm">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex items-start space-x-3">
+          <div class="w-10 h-10 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-[24px]">content_copy</span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-amber-200 text-amber-900 tracking-wider">
+                Active Duplicate Blocked
+              </span>
+              <span class="text-xs text-amber-800 font-semibold">
+                {{ dup.reason }}
+              </span>
+            </div>
+            <h3 class="text-base font-bold text-amber-950 mt-1">This problem has already been reported</h3>
+            <p class="text-xs text-amber-900 mt-0.5">
+              An active work order matching this problem is already open. Multiple tickets for the same issue are prevented to avoid duplicate technician dispatches.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          (click)="dismissDuplicateWarning()"
+          class="text-amber-800 hover:text-amber-950 p-1.5 rounded-lg hover:bg-amber-100 transition-colors"
+          title="Dismiss duplicate alert"
+        >
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <!-- Matching Ticket Details Box -->
+      <div class="bg-white border border-amber-200 rounded-lg p-4 space-y-3 shadow-xs">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+          <div class="flex items-center space-x-2">
+            <span class="text-xs font-mono font-bold text-[#1E3A8A] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+              #{{ dup.ticketNumber || dup.ticketId.slice(0, 8) }}
+            </span>
+            <span class="text-sm font-bold text-[#0F172A]">{{ dup.title }}</span>
+          </div>
+          <span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 uppercase tracking-wider">
+            Status: {{ dup.status }}
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-[#444651]">
+          <div>
+            <span class="text-[#64748B] block text-[10px] uppercase font-semibold">Location</span>
+            <span class="font-medium text-[#0F172A]">
+              {{ dup.building }} {{ dup.floor ? '• ' + dup.floor : '' }} • Room {{ dup.room || 'N/A' }}
+            </span>
+          </div>
+          <div>
+            <span class="text-[#64748B] block text-[10px] uppercase font-semibold">Category</span>
+            <span class="font-medium text-[#0F172A]">{{ dup.category }}</span>
+          </div>
+          <div>
+            <span class="text-[#64748B] block text-[10px] uppercase font-semibold">Reported Date</span>
+            <span class="font-medium text-[#0F172A]">{{ dup.createdAt | date:'medium' }}</span>
+          </div>
+        </div>
+
+        <div class="text-xs text-[#334155] bg-slate-50 p-2.5 rounded border border-slate-100">
+          <span class="font-semibold text-slate-700">Problem Description: </span>
+          <span>{{ dup.description }}</span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
+          <button
+            type="button"
+            (click)="navigateToExistingTicket(dup.ticketId)"
+            class="px-4 py-2 bg-[#1E3A8A] hover:bg-[#1D4ED8] text-white rounded text-xs font-semibold flex items-center space-x-1.5 shadow-sm transition-colors cursor-pointer"
+          >
+            <span class="material-symbols-outlined text-[16px]">visibility</span>
+            <span>View Existing Issue</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Potential Duplicates Review Panel -->
+  @if (potentialDuplicates().length > 0 && !confirmedDuplicate()) {
+    <div class="p-5 bg-blue-50/70 border-2 border-blue-200 rounded-xl space-y-4 animate-in fade-in shadow-sm">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex items-start space-x-3">
+          <div class="w-10 h-10 rounded-lg bg-[#1E3A8A] text-white flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-[24px]">fact_check</span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-blue-200 text-blue-900 tracking-wider">
+                Review Similar Issues ({{ potentialDuplicates().length }})
+              </span>
+            </div>
+            <h3 class="text-base font-bold text-[#0F172A] mt-1">Similar active issues found in this location</h3>
+            <p class="text-xs text-[#444651] mt-0.5">
+              Please review the active tickets below. If your problem is already described, you can view the existing ticket instead of creating a redundant one. If your issue is different, you may proceed.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          (click)="dismissDuplicateWarning()"
+          class="text-[#64748B] hover:text-[#0F172A] p-1.5 rounded-lg hover:bg-blue-100 transition-colors"
+          title="Dismiss"
+        >
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <!-- List of Potential Matches -->
+      <div class="space-y-3 max-h-[360px] overflow-y-auto pr-1">
+        @for (match of potentialDuplicates(); track match.ticketId) {
+          <div class="bg-white border border-blue-200 rounded-lg p-3.5 space-y-2 hover:border-[#1E3A8A] transition-colors shadow-2xs">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center space-x-2">
+                <span class="text-xs font-mono font-bold text-[#1E3A8A] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                  #{{ match.ticketNumber || match.ticketId.slice(0, 8) }}
+                </span>
+                <span class="text-sm font-bold text-[#0F172A]">{{ match.title }}</span>
+              </div>
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700">
+                  {{ match.status }}
+                </span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800">
+                  {{ Math.round(match.similarityScore * 100) }}% match
+                </span>
+              </div>
+            </div>
+
+            <p class="text-xs text-[#444651] line-clamp-2">{{ match.description }}</p>
+
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-[#64748B]">
+              <span>{{ match.building }} {{ match.room ? '• Room ' + match.room : '' }} • {{ match.createdAt | date:'short' }}</span>
+              <button
+                type="button"
+                (click)="navigateToExistingTicket(match.ticketId)"
+                class="px-2.5 py-1 text-[#1E3A8A] hover:bg-blue-50 font-semibold rounded transition-colors inline-flex items-center space-x-1 cursor-pointer"
+              >
+                <span class="material-symbols-outlined text-[14px]">open_in_new</span>
+                <span>View Existing Issue</span>
+              </button>
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- Action Choice Buttons -->
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-blue-200">
+        <p class="text-xs text-[#64748B] m-0">
+          Is your problem genuinely different from the ones listed above?
+        </p>
+        <div class="flex items-center space-x-2 w-full sm:w-auto">
+          <button
+            type="button"
+            (click)="dismissDuplicateWarning()"
+            class="px-3.5 py-2 border border-[#CBD5E1] bg-white hover:bg-slate-50 text-[#334155] rounded text-xs font-semibold transition-colors flex-1 sm:flex-none cursor-pointer"
+          >
+            Review / Edit Details
+          </button>
+          <button
+            type="button"
+            (click)="proceedAnyway()"
+            class="px-4 py-2 bg-[#1E3A8A] hover:bg-[#1D4ED8] text-white rounded text-xs font-semibold transition-colors shadow-xs flex-1 sm:flex-none inline-flex items-center justify-center space-x-1.5 cursor-pointer"
+          >
+            <span>My Issue is Different — Submit Anyway</span>
+            <span class="material-symbols-outlined text-[15px]">arrow_forward</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Form Body -->
+  <form [formGroup]="form" (ngSubmit)="onSubmit()" class="space-y-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Main Columns: Inputs (2 cols on lg) -->
+      <div class="lg:col-span-2 space-y-6">
+        <!-- Section 1: Issue Summary -->
+        <div class="bg-white border border-[#E2E8F0] rounded-xl p-6 shadow-[0_1px_2px_0_rgba(15,23,42,0.04)] space-y-5">
+          <div class="border-b border-[#F1F5F9] pb-3">
+            <h2 class="text-base font-bold text-[#0F172A] flex items-center space-x-2">
+              <span class="material-symbols-outlined text-[20px] text-[#1E3A8A]">build</span>
+              <span>Issue Details</span>
+            </h2>
+            <p class="text-xs text-[#64748B] mt-0.5">Provide a concise headline and select the appropriate trade category</p>
+          </div>
+
+          <!-- Issue Title -->
+          <app-form-field
+            label="Issue Title / Summary"
+            forId="title"
+            [required]="true"
+            [errorMessage]="isFieldInvalid('title') ? getErrorMessage('title') : undefined"
+            hint="Example: Broken projector lamp in lecture hall, or water leak under bathroom sink"
+          >
+            <input
+              id="title"
+              type="text"
+              formControlName="title"
+              placeholder="Brief summary of the physical issue"
+              class="w-full h-[40px] px-3.5 bg-white border rounded text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none transition-colors"
+              [ngClass]="isFieldInvalid('title') ? 'border-[#DC2626] ring-1 ring-[#DC2626]' : 'border-[#CBD5E1] focus:border-[#1E3A8A] focus:ring-2 focus:ring-[#1E3A8A]/15'"
+            />
+          </app-form-field>
+
+          <!-- Category & Priority Row -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Category -->
+            <app-form-field
+              label="Issue Category"
+              forId="category"
+              [required]="true"
+              [errorMessage]="isFieldInvalid('category') ? getErrorMessage('category') : undefined"
+            >
+              <select
+                id="category"
+                formControlName="category"
+                class="w-full h-[40px] px-3 bg-white border rounded text-sm text-[#0F172A] focus:outline-none transition-colors"
+                [ngClass]="isFieldInvalid('category') ? 'border-[#DC2626]' : 'border-[#CBD5E1] focus:border-[#1E3A8A] focus:ring-2 focus:ring-[#1E3A8A]/15'"
+              >
+                <option value="" disabled selected>Select category...</option>
+                @for (cat of categories(); track cat) {
+                  <option [value]="cat">{{ cat }}</option>
+                }
+              </select>
+            </app-form-field>
+
+            <!-- Priority -->
+            <app-form-field
+              label="Urgency / Priority"
+              forId="priority"
+              [required]="true"
+              hint="Urgent is reserved for active leaks, power loss or hazards"
+            >
+              <select
+                id="priority"
+                formControlName="priority"
+                class="w-full h-[40px] px-3 bg-white border border-[#CBD5E1] rounded text-sm text-[#0F172A] focus:outline-none focus:border-[#1E3A8A] focus:ring-2 focus:ring-[#1E3A8A]/15"
+              >
+                <option value="LOW">Low - Routine cosmetic or minor upkeep</option>
+                <option value="MEDIUM">Medium - Standard repair needed</option>
+                <option value="HIGH">High - Impacting daily activity / learning</option>
+                <option value="CRITICAL">Critical - Safety hazard, flooding, outage</option>
+              </select>
+            </app-form-field>
+          </div>
+        </div>
+
+        <!-- Section 2: Location Details -->
+        <div class="bg-white border border-[#E2E8F0] rounded-xl p-6 shadow-[0_1px_2px_0_rgba(15,23,42,0.04)] space-y-5">
+          <div class="border-b border-[#F1F5F9] pb-3">
+            <h2 class="text-base font-bold text-[#0F172A] flex items-center space-x-2">
+              <span class="material-symbols-outlined text-[20px] text-[#1E3A8A]">location_on</span>
+              <span>Campus Location</span>
+            </h2>
+            <p class="text-xs text-[#64748B] mt-0.5">Specify exactly where facility technicians can find the issue</p>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <!-- Building -->
+            <app-form-field
+              label="Building / Facility"
+              forId="building"
+              [required]="true"
+              [errorMessage]="isFieldInvalid('building') ? getErrorMessage('building') : undefined"
+            >
+              <select
+                id="building"
+                formControlName="building"
+                class="w-full h-[40px] px-3 bg-white border rounded text-sm text-[#0F172A] focus:outline-none transition-colors"
+                [ngClass]="isFieldInvalid('building') ? 'border-[#DC2626]' : 'border-[#CBD5E1] focus:border-[#1E3A8A] focus:ring-2 focus:ring-[#1E3A8A]/15'"
+              >
+                <option value="" disabled selected>Select campus building...</option>
+                @for (b of buildings(); track b) {
+                  <option [value]="b">{{ b }}</option>
+                }
+              </select>
+            </app-form-field>
+
+            <!-- Floor -->
+            <app-form-field
+              label="Floor / Level"
+              forId="floor"
+              [errorMessage]="isFieldInvalid('floor') ? getErrorMessage('floor') : undefined"
+              hint="E.g., 2nd Floor, Ground, Basement"
+            >
+              <input
+                id="floor"
+                type="text"
+                formControlName="floor"
+                placeholder="e.g. 2nd Floor"
+                class="w-full h-[40px] px-3.5 bg-white border rounded text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none transition-colors"
+                [ngClass]="isFieldInvalid('floor') ? 'border-[#DC2626] ring-1 ring-[#DC2626]' : 'border-[#CBD5E1] focus:border-[#1E3A8A] focus:ring-2 focus:ring-[#1E3A8A]/15'"
+              />
+            </app-form-field>
+
+            <!-- Room / Space -->
+            <app-form-field
+              label="Room / Specific Space Details"
+              forId="room"
+              [required]="true"
+              [errorMessage]="isFieldInvalid('room') ? getErrorMessage('room') : undefined"
+              hint="E.g., Room 302, Restroom, East Wing"
+            >
+              <input
+                id="room"
+                type="text"
+                formControlName="room"
+                placeholder="Specific room or area"
+                class="w-full h-[40px] px-3.5 bg-white border rounded text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none transition-colors"
+                [ngClass]="isFieldInvalid('room') ? 'border-[#DC2626] ring-1 ring-[#DC2626]' : 'border-[#CBD5E1] focus:border-[#1E3A8A] focus:ring-2 focus:ring-[#1E3A8A]/15'"
+              />
+            </app-form-field>
+          </div>
+        </div>
+
+        <!-- Section 3: Description & Additional Details -->
+        <div class="bg-white border border-[#E2E8F0] rounded-xl p-6 shadow-[0_1px_2px_0_rgba(15,23,42,0.04)] space-y-5">
+          <div class="border-b border-[#F1F5F9] pb-3">
+            <h2 class="text-base font-bold text-[#0F172A] flex items-center space-x-2">
+              <span class="material-symbols-outlined text-[20px] text-[#1E3A8A]">description</span>
+              <span>Description & Observations</span>
+            </h2>
+            <p class="text-xs text-[#64748B] mt-0.5">Describe what is happening, error messages, smells, sounds, or visual damage</p>
+          </div>
+
+          <!-- Description -->
+          <app-form-field
+            label="Detailed Description"
+            forId="description"
+            [required]="true"
+            [errorMessage]="isFieldInvalid('description') ? getErrorMessage('description') : undefined"
+            hint="Please include as much detail as possible to help technicians bring the right tools"
+          >
+            <textarea
+              id="description"
+              formControlName="description"
+              rows="4"
+              placeholder="Explain the issue in detail (minimum 15 characters)..."
+              class="w-full p-3.5 bg-white border rounded text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none transition-colors resize-y"
+              [ngClass]="isFieldInvalid('description') ? 'border-[#DC2626] ring-1 ring-[#DC2626]' : 'border-[#CBD5E1] focus:border-[#1E3A8A] focus:ring-2 focus:ring-[#1E3A8A]/15'"
+            ></textarea>
+            <div class="flex justify-end text-[11px] text-[#94A3B8]">
+              {{ form.get('description')?.value?.length || 0 }} / 2000
+            </div>
+          </app-form-field>
+
+          <!-- Additional Notes -->
+          <app-form-field
+            label="Access Instructions / Hours / Contact Notes (Optional)"
+            forId="additionalDetails"
+            hint="e.g. 'Lab is open between 9am-5pm. Call my cell upon arrival.'"
+          >
+            <input
+              id="additionalDetails"
+              type="text"
+              formControlName="additionalDetails"
+              placeholder="Any specific access timing or door codes"
+              class="w-full h-[40px] px-3.5 bg-white border border-[#CBD5E1] rounded text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#1E3A8A] focus:ring-2 focus:ring-[#1E3A8A]/15"
+            />
+          </app-form-field>
+        </div>
+
+        <!-- Section 4: Attachments / Photos -->
+        <div class="bg-white border border-[#E2E8F0] rounded-xl p-6 shadow-[0_1px_2px_0_rgba(15,23,42,0.04)] space-y-4">
+          <div class="border-b border-[#F1F5F9] pb-3 flex items-center justify-between">
+            <div>
+              <h2 class="text-base font-bold text-[#0F172A] flex items-center space-x-2">
+                <span class="material-symbols-outlined text-[20px] text-[#1E3A8A]">add_photo_alternate</span>
+                <span>Issue Photos & Evidence</span>
+              </h2>
+              <p class="text-xs text-[#64748B] mt-0.5">Attach optional photos showing the problem (JPEG, PNG, WebP up to 10MB each, max 5 images)</p>
+            </div>
+            <span class="text-xs font-semibold text-[#64748B]">{{ selectedFiles().length }} / 5 images</span>
+          </div>
+
+          @if (fileError()) {
+            <div class="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center space-x-2 text-xs text-rose-700">
+              <span class="material-symbols-outlined text-rose-500 text-[18px]">error</span>
+              <span>{{ fileError() }}</span>
+            </div>
+          }
+
+          <!-- Hidden inputs for Camera and Gallery -->
+          <input
+            #galleryInput
+            type="file"
+            multiple
+            accept="image/jpeg,image/png,image/webp"
+            (change)="onFileSelected($event)"
+            class="hidden"
+          />
+          <input
+            #cameraInput
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            capture="environment"
+            (change)="onCameraCaptured($event)"
+            class="hidden"
+          />
+
+          <!-- Upload Interface & Drag & Drop Zone -->
+          <div
+            (dragover)="onDragOver($event)"
+            (dragleave)="onDragLeave($event)"
+            (drop)="onDrop($event)"
+            class="border-2 border-dashed rounded-xl p-6 text-center transition-colors relative"
+            [ngClass]="isDragOver() ? 'border-[#1E3A8A] bg-[#EFF4FF]' : 'border-[#CBD5E1] hover:border-[#1E3A8A] bg-[#F8FAFC]'"
+          >
+            <div class="flex flex-col items-center space-y-3">
+              <div class="w-12 h-12 rounded-full bg-[#EFF6FF] text-[#1E3A8A] flex items-center justify-center border border-[#BFDBFE]">
+                <span class="material-symbols-outlined text-[28px]">add_a_photo</span>
+              </div>
+              <div class="space-y-1">
+                <p class="text-xs font-bold text-[#0F172A]">
+                  Add Photos of the Issue
+                </p>
+                <p class="text-[11px] text-[#64748B]">
+                  Take a new photo with your device camera or select existing images
+                </p>
+              </div>
+
+              <!-- Two Clearly Labeled Action Options -->
+              <div class="flex flex-col sm:flex-row items-center justify-center gap-2.5 w-full max-w-sm pt-1">
+                <!-- Option 1: Take Photo -->
+                <button
+                  type="button"
+                  (click)="takePhoto()"
+                  class="w-full sm:w-1/2 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#1E3A8A] border border-[#BFDBFE] rounded-lg text-xs font-semibold shadow-2xs hover:shadow-xs transition-all cursor-pointer focus:ring-2 focus:ring-[#1E3A8A] focus:outline-hidden"
+                  aria-label="Take Photo with camera"
+                >
+                  <span class="material-symbols-outlined text-[18px]">photo_camera</span>
+                  <span>Take Photo</span>
+                </button>
+
+                <!-- Option 2: Upload from Gallery -->
+                <button
+                  type="button"
+                  (click)="galleryInput.click()"
+                  class="w-full sm:w-1/2 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 hover:border-slate-400 rounded-lg text-xs font-semibold shadow-2xs hover:shadow-xs transition-all cursor-pointer focus:ring-2 focus:ring-[#1E3A8A] focus:outline-hidden"
+                  aria-label="Upload from Gallery or files"
+                >
+                  <span class="material-symbols-outlined text-[18px]">photo_library</span>
+                  <span>Upload from Gallery</span>
+                </button>
+              </div>
+
+              <p class="text-[11px] text-[#64748B] pt-1">
+                or drag &amp; drop images here • Supports JPEG, PNG, WebP up to 10MB each (max 5)
+              </p>
+            </div>
+          </div>
+
+          <!-- Selected Files List -->
+          @if (selectedFiles().length > 0) {
+            <div class="space-y-2 pt-2">
+              <div class="flex items-center justify-between text-xs text-[#64748B] px-1">
+                <span class="font-semibold">Selected Images ({{ selectedFiles().length }} of 5)</span>
+                <span class="text-[11px]">Click thumbnail to preview full size</span>
+              </div>
+              @for (file of selectedFiles(); track file.name; let idx = $index) {
+                <div class="flex items-center justify-between p-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg hover:border-slate-300 transition-colors">
+                  <div class="flex items-center space-x-3 overflow-hidden cursor-pointer" (click)="openPreview(file)" title="Click to view full preview">
+                    @if (file.isImage && file.previewUrl) {
+                      <div class="relative group shrink-0">
+                        <img [src]="file.previewUrl" [alt]="file.name" class="w-11 h-11 rounded object-cover border border-[#E2E8F0] group-hover:opacity-90 transition-opacity" />
+                        <span class="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 rounded text-white transition-opacity">
+                          <span class="material-symbols-outlined text-sm">visibility</span>
+                        </span>
+                      </div>
+                    } @else {
+                      <div class="w-11 h-11 rounded bg-[#EFF6FF] text-[#1E3A8A] flex items-center justify-center shrink-0">
+                        <span class="material-symbols-outlined text-[20px]">description</span>
+                      </div>
+                    }
+                    <div class="truncate">
+                      <div class="flex items-center gap-1.5 truncate">
+                        <p class="text-xs font-semibold text-[#0F172A] truncate hover:text-[#1E3A8A] transition-colors">{{ file.name }}</p>
+                        @if (file.isCameraCapture) {
+                          <span class="inline-flex items-center gap-0.5 text-[9px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1 py-0.2 rounded shrink-0">
+                            <span class="material-symbols-outlined text-[10px]">photo_camera</span>
+                            Camera
+                          </span>
+                        }
+                      </div>
+                      <p class="text-[10px] text-[#64748B]">{{ file.sizeFormatted }}</p>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-1 shrink-0">
+                    @if (file.isCameraCapture) {
+                      <button
+                        type="button"
+                        (click)="retakeFile(idx)"
+                        class="p-1.5 text-[#64748B] hover:text-[#1E3A8A] hover:bg-blue-50 rounded transition-colors inline-flex items-center"
+                        title="Retake photo with camera"
+                        aria-label="Retake photo"
+                      >
+                        <span class="material-symbols-outlined text-[18px]">refresh</span>
+                      </button>
+                    }
+                    <button
+                      type="button"
+                      (click)="removeFile(idx)"
+                      class="p-1.5 text-[#64748B] hover:text-[#DC2626] hover:bg-rose-50 rounded transition-colors inline-flex items-center"
+                      title="Remove file"
+                      aria-label="Remove image"
+                    >
+                      <span class="material-symbols-outlined text-[18px]">delete</span>
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Side Column: Guidelines & Actions (1 col on lg) -->
+      <div class="space-y-6">
+        <!-- Guidelines Card -->
+        <div class="bg-white border border-[#E2E8F0] rounded-xl p-5 shadow-[0_1px_2px_0_rgba(15,23,42,0.04)] space-y-4">
+          <h3 class="text-sm font-bold text-[#0F172A] flex items-center space-x-2">
+            <span class="material-symbols-outlined text-[18px] text-[#1E3A8A]">info</span>
+            <span>Reporting Guidelines</span>
+          </h3>
+          <ul class="text-xs text-[#444651] space-y-2.5 list-disc list-inside">
+            <li><strong>Emergency Hazard:</strong> If there is immediate danger (gas smell, electrical fire risk), please also contact Campus Police Dispatch directly.</li>
+            <li><strong>Accuracy:</strong> Detailed room numbers and descriptions reduce repair turnaround time by over 40%.</li>
+            <li><strong>Updates:</strong> You will receive notifications when a technician is dispatched and when work status changes.</li>
+          </ul>
+        </div>
+
+        <!-- Reporter Verification Card -->
+        <div class="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-5 space-y-3">
+          <span class="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Submitting Reporter</span>
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-full bg-[#1E3A8A] text-white flex items-center justify-center font-bold text-sm">
+              AC
+            </div>
+            <div>
+              <p class="text-xs font-bold text-[#0F172A]">Alex Chen</p>
+              <p class="text-[11px] text-[#64748B]">alex.chen&#64;university.edu</p>
+              <p class="text-[10px] text-[#1E3A8A] font-medium">Verified Campus User</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Form Actions Card (Sticky on desktop) -->
+        <div class="bg-white border border-[#E2E8F0] rounded-xl p-5 shadow-[0_1px_2px_0_rgba(15,23,42,0.04)] space-y-3 sticky top-24">
+          <button
+            type="submit"
+            [disabled]="submitting() || !!confirmedDuplicate()"
+            class="w-full h-[42px] bg-[#1E3A8A] hover:bg-[#1D4ED8] disabled:opacity-50 text-white font-semibold rounded text-sm flex items-center justify-center space-x-2 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+          >
+            @if (checkingDuplicates()) {
+              <span class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+              <span>Checking for duplicates...</span>
+            } @else if (submitting()) {
+              <span class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+              <span>Submitting Request...</span>
+            } @else if (confirmedDuplicate()) {
+              <span class="material-symbols-outlined text-[18px]">block</span>
+              <span>Duplicate Issue Blocked</span>
+            } @else {
+              <span class="material-symbols-outlined text-[18px]">send</span>
+              <span>Submit Issue Ticket</span>
+            }
+          </button>
+
+          <button
+            type="button"
+            (click)="resetForm()"
+            [disabled]="submitting()"
+            class="w-full h-[38px] bg-white border border-[#CBD5E1] text-[#334155] hover:bg-[#F8FAFC] font-medium rounded text-xs transition-colors"
+          >
+            Reset Form
+          </button>
+
+          <button
+            type="button"
+            (click)="onCancel()"
+            class="w-full text-center text-xs text-[#64748B] hover:text-[#DC2626] font-medium py-1 transition-colors"
+          >
+            Cancel and Return
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+</app-page-container>

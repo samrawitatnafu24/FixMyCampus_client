@@ -1,0 +1,395 @@
+<div class="w-full py-2">
+  <!-- Top Welcome & Operational Status Header -->
+  <div class="flex flex-wrap items-center justify-between gap-4 mb-5">
+    <div>
+      <h1 class="m-0 text-[22px] font-bold tracking-tight text-slate-900">
+        Facilities Operations & Work Orders
+      </h1>
+      <p class="mt-[3px] mb-0 text-[13px] text-slate-500">
+        Central monitoring for university physical plant, structural maintenance, and technician dispatches.
+      </p>
+    </div>
+
+    <!-- Quick Action Toolbar -->
+    <div class="flex items-center gap-[10px]">
+      <button
+        type="button"
+        (click)="exportReport()"
+        class="flex items-center gap-[6px] text-slate-500 border border-slate-200 rounded-[10px] h-[38px] text-[13px] font-semibold px-[14px] bg-white transition-all duration-200 hover:bg-slate-50 hover:text-slate-800 hover:border-slate-300 shadow-sm"
+      >
+        <span class="material-symbols-outlined text-[18px] w-[18px] h-[18px]">download</span>
+        Export CSV
+      </button>
+
+      <button
+        type="button"
+        (click)="broadcastAlert()"
+        class="flex items-center gap-[6px] text-slate-500 border border-slate-200 rounded-[10px] h-[38px] text-[13px] font-semibold px-[14px] bg-white transition-all duration-200 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 shadow-sm"
+      >
+        <span class="material-symbols-outlined text-[18px] w-[18px] h-[18px] text-amber-500">campaign</span>
+        Campus Notice
+      </button>
+
+      <button
+        type="button"
+        (click)="viewAllTickets()"
+        class="flex items-center gap-[6px] text-white border border-primary rounded-[10px] h-[38px] text-[13px] font-semibold px-[14px] bg-primary transition-all duration-200 hover:bg-blue-700 hover:border-blue-700 shadow-sm"
+      >
+        <span class="material-symbols-outlined text-[18px] w-[18px] h-[18px]">format_list_bulleted</span>
+        View All Tickets
+      </button>
+    </div>
+  </div>
+
+  <!-- 6 Metric KPI Cards Grid -->
+  @if (dashboardStore.adminStats(); as m) {
+    <div class="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4 mb-6">
+      <!-- Total Tickets -->
+      <app-stat-card
+        label="Total Tickets"
+        [value]="m.totalTickets"
+        icon="assignment"
+        iconVariant="primary"
+        trendText="All time"
+        subtext="Campus ticket logs"
+        [clickable]="true"
+        [active]="selectedStatusFilter() === 'ALL'"
+        (cardClick)="filterBy('ALL')"
+      ></app-stat-card>
+
+      <!-- Open Tickets -->
+      <app-stat-card
+        label="Assigned / Queued"
+        [value]="m.newTickets + m.assignedTickets"
+        icon="pending_actions"
+        iconVariant="amber"
+        trendText="Pending Start"
+        subtext="Requires technician arrival"
+        [clickable]="true"
+        [active]="selectedStatusFilter() === 'OPEN'"
+        (cardClick)="filterBy('OPEN')"
+      ></app-stat-card>
+
+      <!-- In Progress -->
+      <app-stat-card
+        label="In Progress"
+        [value]="m.inProgressTickets"
+        icon="build"
+        iconVariant="sky"
+        trendText="Under Repair"
+        subtext="Active diagnostics & repair"
+        [clickable]="true"
+        [active]="selectedStatusFilter() === 'IN_PROGRESS'"
+        (cardClick)="filterBy('IN_PROGRESS')"
+      ></app-stat-card>
+
+      <!-- Resolved -->
+      <app-stat-card
+        label="Resolved"
+        [value]="m.resolvedTickets"
+        icon="task_alt"
+        iconVariant="emerald"
+        trendText="Fixed"
+        subtext="Work completed"
+        [clickable]="true"
+        [active]="selectedStatusFilter() === 'RESOLVED'"
+        (cardClick)="filterBy('RESOLVED')"
+      ></app-stat-card>
+
+      <!-- Closed -->
+      <app-stat-card
+        label="Closed"
+        [value]="m.closedTickets"
+        icon="verified"
+        iconVariant="slate"
+        trendText="Archived"
+        subtext="Audited by administrator"
+        [clickable]="true"
+        [active]="selectedStatusFilter() === 'CLOSED'"
+        (cardClick)="filterBy('CLOSED')"
+      ></app-stat-card>
+
+      <!-- Unassigned Urgent Alert -->
+      <app-stat-card
+        label="Needs Dispatch"
+        [value]="m.unassignedTickets"
+        icon="error"
+        iconVariant="rose"
+        trendText="Needs Attention"
+        subtext="Unassigned tickets"
+        [clickable]="true"
+        [active]="selectedStatusFilter() === 'UNASSIGNED'"
+        (cardClick)="filterBy('UNASSIGNED')"
+      ></app-stat-card>
+    </div>
+  }
+
+  <!-- Operational Statistics & Velocity Section (Chart.js) -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-[14px] mb-6 items-stretch">
+    <!-- Category Distribution (Chart.js Doughnut) -->
+    <mat-card appearance="outlined" class="!bg-white !border-slate-200 !rounded-[14px] p-5 !shadow-sm flex flex-col justify-between min-h-[340px]">
+      <div>
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-2">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary text-xl">pie_chart</span>
+            <h3 class="text-[17px] font-semibold text-slate-900 m-0">Work Orders by Category</h3>
+          </div>
+          <span class="text-[13.5px] font-medium text-slate-500">Total: {{ totalTicketsCount() }}</span>
+        </div>
+
+        <div class="relative w-full h-[180px] flex items-center justify-center my-1">
+          <canvas #categoryCanvas></canvas>
+          <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <span class="text-xl font-bold font-mono text-slate-900 leading-none">{{ totalTicketsCount() }}</span>
+            <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-1">Orders</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Category Legend Grid -->
+      <div class="grid grid-cols-2 gap-x-3 gap-y-1.5 pt-2.5 border-t border-slate-100 text-xs">
+        @for (c of dashboardStore.categoryMetrics(); track c.category) {
+          <div class="flex items-center justify-between py-0.5">
+            <span class="text-slate-700 flex items-center gap-1.5 truncate">
+              <span class="w-2 h-2 rounded-full shrink-0" [style.backgroundColor]="getCategoryColor(c.category, $index)"></span>
+              <span class="truncate">{{ formatCategoryName(c.category) }}</span>
+            </span>
+            <span class="text-slate-500 font-semibold shrink-0 ml-1">{{ c.count }}</span>
+          </div>
+        }
+      </div>
+    </mat-card>
+
+    <!-- Priority Breakdown (Chart.js Horizontal Bar) -->
+    <mat-card appearance="outlined" class="!bg-white !border-slate-200 !rounded-[14px] p-5 !shadow-sm flex flex-col justify-between min-h-[340px]">
+      <div>
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-2">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-rose-600 text-xl">priority_high</span>
+            <h3 class="text-[17px] font-semibold text-slate-900 m-0">Severity Distribution</h3>
+          </div>
+          <span class="text-[13.5px] font-medium text-slate-500">Resolution SLA</span>
+        </div>
+
+        <div class="relative w-full h-[180px] my-1">
+          <canvas #priorityCanvas></canvas>
+        </div>
+      </div>
+
+      <!-- Priority SLA Indicators -->
+      <div class="grid grid-cols-2 gap-2 pt-2.5 border-t border-slate-100 text-[11px]">
+        <div class="flex items-center justify-between p-1.5 rounded bg-rose-50 border border-rose-100">
+          <span class="font-semibold text-rose-700">CRITICAL</span>
+          <span class="text-rose-600 font-medium">&lt; 4h SLA</span>
+        </div>
+        <div class="flex items-center justify-between p-1.5 rounded bg-amber-50 border border-amber-100">
+          <span class="font-semibold text-amber-700">HIGH</span>
+          <span class="text-amber-600 font-medium">&lt; 12h SLA</span>
+        </div>
+        <div class="flex items-center justify-between p-1.5 rounded bg-sky-50 border border-sky-100">
+          <span class="font-semibold text-sky-700">MEDIUM</span>
+          <span class="text-sky-600 font-medium">&lt; 48h SLA</span>
+        </div>
+        <div class="flex items-center justify-between p-1.5 rounded bg-emerald-50 border border-emerald-100">
+          <span class="font-semibold text-emerald-700">LOW</span>
+          <span class="text-emerald-600 font-medium">Standard</span>
+        </div>
+      </div>
+    </mat-card>
+
+    <!-- Weekly Throughput Velocity (Chart.js Grouped Bar) -->
+    <mat-card appearance="outlined" class="!bg-white !border-slate-200 !rounded-[14px] p-5 !shadow-sm flex flex-col justify-between min-h-[340px]">
+      <div>
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-2">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-emerald-600 text-xl">insights</span>
+            <h3 class="text-[17px] font-semibold text-slate-900 m-0">Weekly Throughput</h3>
+          </div>
+          <div class="flex items-center gap-3 text-[11px] font-semibold">
+            <span class="flex items-center gap-1 text-primary">
+              <span class="w-2 h-2 rounded-full bg-blue-600"></span> Created
+            </span>
+            <span class="flex items-center gap-1 text-emerald-600">
+              <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Resolved
+            </span>
+          </div>
+        </div>
+
+        <div class="relative w-full h-[180px] my-1">
+          <canvas #velocityCanvas></canvas>
+        </div>
+      </div>
+
+      <!-- Velocity Metric Summary Footer -->
+      <div class="flex items-center justify-between pt-2.5 border-t border-slate-100 text-xs text-slate-500">
+        <span>7-day operational turnaround</span>
+        <span class="font-semibold text-slate-700 font-stat-numeric">
+          {{ weeklyResolvedTotal() }} resolved / {{ weeklyCreatedTotal() }} new
+        </span>
+      </div>
+    </mat-card>
+  </div>
+
+  <!-- Recent Tickets Table -->
+  <div class="bg-white border border-slate-200 rounded-[14px] overflow-hidden shadow-sm space-y-0">
+    <div class="p-4 sm:px-5 sm:py-[1.125rem] border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
+      <div class="flex items-center gap-3">
+        <h3 class="text-[17px] font-semibold text-slate-900 m-0">
+          @if (selectedStatusFilter() !== 'ALL') {
+            Filtered Tickets ({{ selectedStatusFilter() }})
+          } @else {
+            Recent Maintenance Tickets
+          }
+        </h3>
+        <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+          {{ filteredRecentTickets().length }} items
+        </span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        @if (selectedStatusFilter() !== 'ALL') {
+          <button
+            type="button"
+            (click)="selectedStatusFilter.set('ALL')"
+            class="text-xs font-semibold text-rose-600 hover:underline px-2 py-1"
+          >
+            Clear Filter
+          </button>
+        }
+        <button
+          type="button"
+          (click)="viewAllTickets(selectedStatusFilter())"
+          class="text-[13px] font-bold text-primary hover:text-blue-900 inline-flex items-center gap-1 group cursor-pointer"
+        >
+          <span class="group-hover:underline">View Full Ticket Table</span>
+          <span class="material-symbols-outlined text-[17px] no-underline inline-block">arrow_forward</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr class="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            <th class="py-3 px-5 w-4"></th>
+            <th class="py-3 px-5 whitespace-nowrap">Ticket ID</th>
+            <th class="py-3 px-5">Title</th>
+            <th class="py-3 px-5">Category</th>
+            <th class="py-3 px-5">Building / Room</th>
+            <th class="py-3 px-5">Reporter</th>
+            <th class="py-3 px-5">Technician</th>
+            <th class="py-3 px-5">Status</th>
+            <th class="py-3 px-5 text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-[13px]">
+          @for (ticket of filteredRecentTickets(); track ticket.id) {
+            <tr class="hover:bg-slate-50/80 transition-colors group">
+              <!-- Priority Indicator Bar -->
+              <td class="py-3 pl-5 pr-0 w-1">
+                <div
+                  class="w-1.5 h-8 rounded-full"
+                  [ngClass]="{
+                    'bg-red-500': ticket.priority === 'CRITICAL',
+                    'bg-amber-500': ticket.priority === 'HIGH',
+                    'bg-blue-500': ticket.priority === 'MEDIUM',
+                    'bg-slate-300': ticket.priority === 'LOW'
+                  }"
+                  [title]="'Priority: ' + ticket.priority"
+                ></div>
+              </td>
+
+              <!-- Ticket ID -->
+              <td class="py-3 px-5 whitespace-nowrap">
+                <a
+                  [routerLink]="['/admin/tickets', ticket.ticketNumber]"
+                  class="font-mono text-primary font-bold text-[11px] hover:underline"
+                >
+                  {{ ticket.ticketNumber }}
+                </a>
+              </td>
+              <!-- Title -->
+              <td class="py-3 px-5 max-w-xs">
+                <a
+                  [routerLink]="['/admin/tickets', ticket.ticketNumber]"
+                  class="font-bold text-slate-900 hover:text-primary transition-colors block truncate max-w-[220px]"
+                  [title]="ticket.title"
+                >
+                  {{ ticket.title }}
+                </a>
+                <span class="text-[11px] text-slate-400 mt-0.5 block">
+                  Created {{ ticket.createdAt | date:'short' }}
+                </span>
+              </td>
+
+              <!-- Category -->
+              <td class="py-3 px-5">
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700">
+                  {{ ticket.category }}
+                </span>
+              </td>
+
+              <!-- Building & Room -->
+              <td class="py-3 px-5">
+                <div class="font-medium text-slate-800 truncate max-w-[160px]" [title]="ticket.building">
+                  {{ ticket.building }}
+                </div>
+                <div class="text-[11px] text-slate-400">
+                  {{ ticket.floor ? (ticket.floor + (ticket.room ? ' · ' + ticket.room : '')) : (ticket.room || 'General Area') }}
+                </div>
+              </td>
+
+              <!-- Reporter -->
+              <td class="py-3 px-5">
+                <div class="font-medium text-slate-800">{{ ticket.reporterName }}</div>
+                <div class="text-[11px] text-slate-400">{{ ticket.reporterRole || 'Reporter' }}</div>
+              </td>
+
+              <!-- Technician -->
+              <td class="py-3 px-5">
+                @if (ticket.assignedTechnicianName) {
+                  <div class="flex items-center gap-2">
+                    <div class="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center border border-slate-200">
+                      <span class="material-symbols-outlined text-[14px]">person</span>
+                    </div>
+                    <div class="min-w-0">
+                      <span class="font-medium text-slate-800 truncate block max-w-[110px]">{{ ticket.assignedTechnicianName }}</span>
+                    </div>
+                  </div>
+                } @else {
+                  <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                    <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                    Unassigned
+                  </span>
+                }
+              </td>
+
+              <!-- Status Badge -->
+              <td class="py-3 px-5">
+                <app-status-badge [status]="ticket.status"></app-status-badge>
+              </td>
+
+              <!-- Action Link -->
+              <td class="py-3 px-5 text-right">
+                <a
+                  [routerLink]="['/admin/tickets', ticket.ticketNumber]"
+                  class="inline-flex items-center justify-center w-8 h-8 text-slate-400 hover:text-primary hover:bg-blue-50 rounded-full transition-colors"
+                >
+                  <span class="material-symbols-outlined text-[1.1rem]">chevron_right</span>
+                </a>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="9" class="py-12 text-center text-slate-400">
+                <span class="material-symbols-outlined text-3xl mb-2 text-slate-300">inbox</span>
+                <p class="text-[13.5px] font-medium m-0">No tickets match the selected filter.</p>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
